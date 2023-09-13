@@ -1,59 +1,63 @@
-## Организация кода
+## Організація коду
 
-Правила, собранные здесь изменяются и дорабатываются. Это нормально, если ранее написанный код не соответствует этим правилам. Для поддержания единообразия в проекте используется "правило бойскаута": _если вы работаете над компонентом, оставьте его чище, чем он был до вас_ (в данном случае - сделайте его ближе к текущим правилам, чем он был до вас)
+Правила, зібрані тут, змінються та допрацьовуються. Це нормально, якщо код, що був написаний раніше, не відповідає цим правилам. Для підтримки одноманітності в проєкті слід використовувати "правило бойскаута": якщо ви працюєте над компонентом, залиште його чистішим, ніж він був до вас (у даному випадку - зробіть його ближче до поточних правил, ніж він був до вас)
 
-### Интеракторы
 
-Вся кодовая база поделена на _интеракторы_. Интеракторы характеризуются тем, что хорошо делают одну вещь из логики приложения. Например, удаляют объект недвижимости или извлекают все данные для страницы ЖК. И называются соответственно: secondary_market_object_deleter или building_landing_loader. На каждый интерактор выделяется отдельная директория в формате `src/<название_интерактора>/`. Зачастую интерактор является классом в отдельном файле. Название такого файла будет либо `interactor.py`, либо с префиксом `interactor_`, например `interactor_my_loader.py`
+### Інтерактори
 
-Директории интеракторов можно группировать по общему префиксу в названии. Скажем, группу интеракторов
+Вся бізнес-логіка розташована у директорії `core` та поділена на _інтерактори_. Зазвичай інтерактор є одним класом. Інтерактори характеризуються тим, що добре роблять одну річ із логіки застосунку. Наприклад, видаляють об'єкт нерухомості або видобувають усі дані для сторінки ЖК. І називаються відповідно: RealtyDeleter чи BuildingLandingGetter. На кожен інтерактор виділяється окрема директорія в форматі `core/<назва_інтерактора>/`. Сам інтерактор розташовується в окремому файлі у цій директорії. Стандартно такий файл називатиметься `interactor.py`.
+
+Інтерактори можна групувати за спільним префіксом у назві. Скажімо, групу інтеракторів
 
 ```
-src
-- my_item_loader
-  * interactor.py
+core
+- my_item_getter
+  - interactor.py
   ...
 - my_item_saver
+  - interactor.py
   ...
-- my_item_subitems_loader
+- my_item_subitems_getter
   ...
 ```
 
-можно объединить в:
+можна об'єднати в:
 
 ```
-src
+core
 - my_item
-  - loader
-    * interactor.py
+  - getter
+    - interactor.py
     ...
   - saver
+    - interactor.py
     ...
-  - subitems_loader
+  - subitems_getter
     ...
 ```
 
-### Разделение интерфейса
+### Розділення інтерфейсу
 
-Для простоты переиспользования интеракторы принимают и возвращают только примитивные значения или чистые датаклассы. Такие датаклассы обычно определяются непосредственно перед интерактором и зависят исключительно от потребностей интерактора. Пример дальше.
+
+Для спрощення повторного використання інтерактори приймають і повертають лише примітивні значення або чисті датакласи. Такі датакласи зазвичай визначаються безпосередньо перед інтерактором і залежать виключно від потреб інтерактора. Приклад далі.
 
 
 ### Dependency injection
 
-Для гибкости и тестируемости интеракторы используют _внедрение зависимостей_ вместо прямого импорта инструментов. Большая часть кода пишется в классах, в конструкторы которых передаются необходимые зависимости.
+Для гнучкості та тестовності інтерактори використовують _впровадження залежностей_ замість прямого імпорту інструментів. Більша частина коду пишеться в класах, а необхідні залежності передаються в їх конструктори.
 
-В частности внедрение зависимостей используется для доступа к базе данных. Если класс пишет в базу, то он делает это через интерфейс TransactionManager из `src.mysql_alchemy.orm.transaction_manager`. Если просто читает - то через интерфейс Session из `sqlalchemy.orm.session`.
+Зокрема впровадження залежностей використовується для доступу до бази даних. Якщо клас пише в базу, то він робить це через інтерфейс TransactionManager з `mysql_alchemy.orm.transaction_manager`. Якщо просто читає - то через інтерфейс Session з `sqlalchemy.orm.session`.
 
 
-Пример чтения:
+Приклад читання:
 
-`src/my_item_loader/interactor.py`
+`core/my_item_getter/interactor.py`
 
 ```python
 from dataclasses import dataclass
 
 from sqlalchemy.orm.session import Session
-from src.mysql_alchemy.orm.my_item import MyItem as MyItemRecord
+from mysql_alchemy.orm import MyItem as MyItemRecord
 
 
 @dataclass
@@ -61,7 +65,7 @@ class MyItem:
     my_item_field: str
 
 
-class MyItemLoader:
+class MyItemGetter:
     def __init__(self, session: Session):
         self.session = session
 
@@ -73,21 +77,21 @@ class MyItemLoader:
 ```
 
 
-Тут my_item_record будет экземпляром записи, наследующей от declarative_base() из sqlalchemy. Сама запись не принимается и не возвращается. Вместо нее передаются экземпляры датаклассов, содержащие исключительно необходимые данные.
+Тут my_item_record буде екземпляром запису, що спадкує від declarative_base() із sqlalchemy. Сам запис не приймається і не повертається. Замість нього передаються екземпляри датакласів, що містять лише необхідні дані.
 
 
-Функция TransactionManager.get_context() возвращает менеджер контекста, который можно использовать с ключевым словом with. При выходе из контекста реализация TransactionManager определяет, что произойдет: коммит, флаш или роллбек.
+Функція TransactionManager.get_context() повертає менеджер контексту, який можна використовувати з ключовим словом with. При виході з контексту реалізація TransactionManager визначає, що станеться: коміт, флаш або роллбек.
 
 
-Пример записи:
+Приклад запису:
 
-`src/my_item_saver/interactor.py`
+`core/my_item_saver/interactor.py`
 
 ```python
 from dataclasses import dataclass
 
-from src.mysql_alchemy.orm.my_item import MyItem as MyItemRecord
-from src.mysql_alchemy.orm.transaction_manager import TransactionManager
+from mysql_alchemy.orm import MyItem as MyItemRecord
+from mysql_alchemy.orm import TransactionManager
 
 
 @dataclass
@@ -107,185 +111,164 @@ class MyItemSaver:
 ```
 
 
-### Инициализация
+### Ініціалізація
 
-К интерактору добавляется файл с функциями для его инициализации. Название такого файла будет либо `init.py`, либо с префиксом `init_`, например `init_my_loader.py`.
+До інтерактора додається файл із функціями для його ініціалізації. Назва такого файлу буде або `init.py`, або з префіксом `init_`, наприклад `init_my_getter.py`.
 
-Продолжая предыдущий пример, файловая структура:
+Продовжуючи попередній приклад, файлова структура:
 
 ```
-src
+core
 - my_item_saver
   * interactor.py
   * init.py
 ```
 
-`src/my_item_saver/init.py`:
+`core/my_item_saver/init.py`
 
 ```python
-from src.my_item_saver.interactor import MyItemSaver
-from src.mysql_alchemy.orm.autocommit_transaction_manager import \
-    AutocommitTransactionManager
+from fastapi import Depends
+
+from tools.action_context.init_site import site_init_action_context
+from tools.action_context.schema import ActionContext
+from core.my_item_saver.interactor import MyItemSaver
 
 
-def prod_init_my_item_saver():
+def site_init_my_item_saver(
+    action_context: ActionContext = Depends(site_init_action_context)
+):
     return MyItemSaver(
-        transaction_manager=AutocommitTransactionManager()
+        transaction_manager=action_context.content_db_transaction_manager
     )
 ```
 
 
-### Точка входа
+### Точка входу
 
-Точкой входа могут служить fastapi эндпоинт, celery таск, rabbitmq консьюмер, команда cli, и другие. Точка входа описывается в отдельном файле рядом с интерактором. Название такого файла будет иметь префикс, совпадающий с типом точки входа, например `fastapi_` (`fastapi_route.py`) или `celery_` (`celery_task.py`).
+Точкою входу може бути fastapi ендпоінт, celery таск, rabbitmq конс'юмер, команда cli, і інші. Точка входу описується в окремому файлі поряд з інтерактором. Назва такого файлу матиме префікс, що співпадає з типом точки входу, наприклад `fastapi_` (`fastapi_route.py`) або `celery_` (`celery_task.py`).
 
-
-Пример файловой структуры:
+Приклад файлової структури:
 
 ```
-src
+core
 - my_item_saver
   * fastapi_route.py
   * init.py
   * interactor.py
 ```
 
-#### FastAPI эндпоинт
+#### FastAPI ендпоінт
 
-Для тестируемости FastAPI эндпоинты используются в комбинации с библиотекой [Dependency Injector](https://python-dependency-injector.ets-labs.org/), позволяющей подменить вызываемый экземпляр интерактора.
+Для тестовності інтерактор не створюється безпосередньо у функції-роуті, а підключається через об'єкт Depends із FastAPI. Це дозволяє в подальших тестах підміняти функцію ініціалізації інтерактора. Також для простоти тестування й підключення кожен роут має свій окремий роутер.
 
-`src/my_item_loader/fastapi_route.py`
+`core/my_item_getter/fastapi_route.py`
 
 ```python
-from dependency_injector.containers import DeclarativeContainer
-from dependency_injector.providers import Object
-from dependency_injector.wiring import Provide, inject
 from fastapi import APIRouter, Depends
-from src.my_item_loader.interactor import MyItemLoader
-from src.rest.responses.base_api_json import JsonResponse
+from fastapi.responses import JSONResponse
+from core.my_item_getter.init import prod_init_my_item_getter
+from core.my_item_getter.interactor import MyItemGetter
+
+my_item_getter_router = APIRouter()
 
 
-class MyItemLoaderContainer(DeclarativeContainer):
-    my_item_loader: Object[MyItemLoader] = Object()
-
-
-my_item_loader_container = MyItemLoaderContainer()
-my_item_loader_router = APIRouter()
-
-
-@my_item_loader_router.get('/my-item')
-@inject
+@my_item_getter_router.get('/my-item')
 def get_my_item(
-    my_item_loader: MyItemLoader = Depends(Provide[
-        MyItemLoaderContainer.my_item_loader
-    ])
+    my_item_getter: MyItemGetter = Depends(
+        prod_init_my_item_getter
+    )
 ):
-    return JsonResponse(data=my_item_loader.load_my_item())
+    return JSONResponse(my_item_getter.load_my_item())
 
-
-my_item_loader_container.wire(modules=[__name__])
 ```
 
-Если несколько интеракторов объединяются в один роутер, то роутер создается в отдельном файле в директории `/src/rest/routes` и регистрирует роуты прямым вызовом декоратора:
+Якщо декілька інтеракторів об'єднуються в один роутер, то роутер створюється в окремому файлі в директорії `/routes/*/` і реєструє підроутери викликом `include_router`:
 
-`src/rest/routes/my_item.py`
+`routes/site/my_item.py`
 
 ```python
 from fastapi import APIRouter
-from src.my_item_loader.fastapi_endpoint import get_my_item
-from src.my_item_saver.fastapi_endpoint import post_my_item
+from core.my_item_getter.fastapi_endpoint import my_item_getter_router
+from core.my_item_saver.fastapi_endpoint import my_item_saver_router
 
 router = APIRouter(tags=['my_item'])
 
-router.get('/my-item')(get_my_item)
-router.post('/my-item')(post_my_item)
+router.include_router(my_item_getter_router)
+router.include_router(my_item_saver_router)
 ```
 
-Для простоты поиска общие префиксы роутов не выносятся в роутер, а пишутся цельной строкой со всем роутом (`/my-item/subitems`)
+Для спрощення пошуку спільні префікси роутів не винесені в роутер, а пишуться цілим рядком з усім роутом (`/my-item/subitems`)
 
-В любом случае для работы в проде роутер нужно включить в соответствующее приложение. Для сайта это делается в файле `src/rest/routes/urls_site.py`, для контент панели – в `src/rest/routes/urls_cp.py`, для других приложений – аналогично.
+В будь-якому випадку для роботи в проді роутер потрібно включити в відповідний застосунок. Для сайту це робиться в файлі `routes/site/urls.py`, для контент панелі - в `routes/cp/urls.py`, для мобільного api - в `routes/mobi/urls.py`.
+
+Ось приклад такого файлу:
+
+```python
+from fastapi import FastAPI
+
+from core.my_item_getter.fastapi_route import my_item_getter_router
+from core.my_item_saver.fastapi_route import my_item_saver_router
 
 
-### Тесты
+def register_routers(app: FastAPI) -> None:
+    app.include_router(my_item_getter_router)
+    app.include_router(my_item_saver_router)
+```
 
-Любые файлы относящиеся к тестам будут иметь префикс `test_`, например `test_unit.py` или `test_init.py`.
+Функція register_routers пізніше викликатиметься безпосередньо з app.py чи іншої точки входу в застосунок.
+
+
+### Тести
+
+Будь-які файли, що відносяться до тестів, будуть мати префікс `test_`, наприклад `test_unit.py` або `test_init.py`.
 
 #### Smoke тест
 
-Для простоты запуска другими разработчиками к интерактору добавляется один автоматический smoke тест. Он характеризуется тем, что прогоняет использование интерактора "от и до", включая, в частности, совершение запроса на fastapi (если интерактор используется в fastapi).
+Для спрощення запуску іншими розробниками до інтерактора додається один автоматичний smoke тест. Він характеризується тим, що проганяє використання інтерактора "від і до", включаючи, зокрема, здійснення запиту на fastapi (якщо інтерактор використовується в fastapi) чи вилкик celery задачі.
 
-Smoke тест является аналогом проверки запроса из postman'а или консоли. В случае с fastapi в нем будет только одна проверка - возвращается ли 200-й статус при заданных параметрах запроса. Smoke тест может делать print тела ответа, чтобы разработчик мог визуально проверить, отдаются ли нужные данные.
+Smoke тест є аналогом перевірки запиту з postman'а чи консолі. У випадку з fastapi в ньому буде тільки одна перевірка - чи повертається 200-й статус при заданих параметрах запиту.
 
-Для smoke теста в файле `init` создается отдельная функция, инициализирующая интерактор для тестирования.
+Приклад тесту з fastapi ендпоінтом:
 
-`src/my_item_saver/init.py`
-
-```python
-from src.my_item_saver.interactor import MyItemSaver
-from src.mysql_alchemy.orm.autorollback_transaction_manager import \
-    init_autorollback_transaction_manager
-from src.mysql_alchemy.orm.autocommit_transaction_manager import \
-    init_prod_autocommit_transaction_manager
-from src.mysql_alchemy.orm.test_orm import create_ge_content_session
-
-def prod_init_my_item_saver():
-    return MyItemSaver(
-        transaction_manager=init_prod_autocommit_transaction_manager()
-    )
-
-def test_init_my_item_saver():
-    return MyItemSaver(
-        transaction_manager=init_autorollback_transaction_manager(
-            create_ge_content_session()
-        )
-    )
-```
-
-Тестовая инициализация интерактора может предусматривать указание базы данных конкретной страны, подключение менеджера транзакций, автоматически откатывающего любую транзакцию (для тестирования на production базе данных), и другое.
-
-Пример теста с fastapi эндпоинтом:
-
-`src/my_item_saver/test_smoke.py`
+`core/my_item_saver/test_smoke.py`
 
 ```python
 from unittest import TestCase
 
 from fastapi import FastAPI
-from src.test_case_runner.run_test_case import run_test_case
-from src.my_item_saver.fastapi_endpoint import (
-    my_item_saver_container, my_item_saver_router)
-from src.my_item_saver.init import test_init_my_item_saver
+
+from tools.action_context.init_site import site_init_action_context
+from tools.action_context.test_init import test_init_action_context
+from tools.test_case_runner.run_test_case import run_test_case
+from core.my_item_saver.fastapi_endpoint import my_item_saver_router
 from starlette.testclient import TestClient
-
-app = FastAPI()
-
-app.include_router(my_item_loader_router)
-
-test_web_client = TestClient(app)
 
 
 class MyItemSaverSmokeTest(TestCase):
     def test_saver_does_not_fail(self):
-        with self.container.my_item_saver.override(self.test_saver):
-            res = test_web_client.post('/my-item')
-            self.assertEqual(res.status_code, 200)
+        res = self.test_web_client.post('/my-item')
+        self.assertEqual(res.status_code, 200)
 
     @classmethod
     def setUpClass(cls):
-        cls.container = my_item_saver_container
-        cls.test_saver = test_init_my_item_saver()
+        app = FastAPI()
+        app.include_router(my_item_saver_router)
+        app.dependency_overrides[
+            site_init_action_context
+        ] = test_init_action_context
+        cls.test_web_client = TestClient(app)
 
 
 if __name__ == '__main__':
     run_test_case(MyItemSaverSmokeTest)
 ```
 
-В IDE можно настроить функцию "отладить файл" с указанием переменной окружения `PYTHONPATH=<путь_к_репозиторию>/site/python`, что сведет отладку интерактора к нажатию одной кнопки на открытом файле с тестом.
+В IDE можна налаштувати функцію "налагодити файл" з указанням змінної середовища `PYTHONPATH=<шлях_до_репозиторію>/site/python`, що зведе відлагодження інтерактора до натискання однієї кнопки на відкритому файлі з тестом.
 
-Таким образом базовая файловая структура интерактора будет выглядеть примерно так:
+Таким чином базова файлова структура інтерактора буде виглядати приблизно так:
 
 ```
-src
+core
 - my_item_saver
   * fastapi_endpoint.py
   * init.py
@@ -295,14 +278,31 @@ src
 
 #### On Push Tests
 
-После создания стабильного smoke теста его стоит добавить в файл on_push_tests.py в корне. Тогда тест будет запускаться через Github Actions при каждом пуше на гитхаб.
+Після створення стабільного smoke тесту його варто додати до файлу `on_push_tests.py` в корені. Цей файл буде запускатися через Github Actions при кожному пуші в PR на гітхаб.
 
+Ось приклад такого файлу:
 
-### Композиция интеракторов
+```python
+import sys
+import unittest
 
-Если интерактор должен использовать функциональность из другого интерактора, от также использует для этого _внедрение зависимостей_.
+from core.my_item_saver.test_smoke import MyItemSaverSmokeTest
+from core.my_item_getter.test_smoke import MyItemGetterSmokeTest
 
-`src/my_item_updater/interactor.py`:
+runner = unittest.TextTestRunner(verbosity=2)
+result = runner.run(unittest.TestSuite([
+    unittest.makeSuite(MyItemSaverSmokeTest),
+    unittest.makeSuite(MyItemGetterSmokeTest),
+]))
+
+sys.exit(0 if result.wasSuccessful() else 1)
+```
+
+### Композиція інтеракторів
+
+Якщо інтерактор використовує інший інтерактор, то він повинен використовувати його через _впровадження залежностей_.
+
+`core/my_item_updater/interactor.py`:
 
 ```python
 class MyItemUpdater:
@@ -314,52 +314,54 @@ class MyItemUpdater:
         self.change_recorder.record_my_item_change(...)
 ```
 
-`src/my_item_updater/init.py`:
+`core/my_item_updater/init.py`:
 
 ```python
-from src.my_item_change_recorder.init import \
+from core.my_item_change_recorder.init import \
     prod_init_my_item_change_recorder
 
-def prod_init_my_item_updater():
+def prod_init_my_item_updater(action_context):
     return MyItemUpdater(
-        change_recorder=prod_init_my_item_change_recorder()
+        change_recorder=prod_init_my_item_change_recorder(action_context)
     )
 ```
 
-### Разделение интерактора
+### Розділення інтеракторів
 
-Если интерактор начинает использовать несколько внешних зависимостей, таких как sqlalchemy, те или иные веб API или адаптации других интеракторов, то эти зависимости стоит выносить в отдельные классы. Так же как интеракторы, эти классы будут принимать и возвращать чистые датаклассы. Таким образом мы избегаем влияния внешних зависимостей на внутреннюю логику интерактора.
+Якщо інтерактор починає використовувати декілька зовнішніх залежностей, таких як sqlalchemy, ті чи інші веб API або складні адаптації інших інтеракторів, то ці залежності варто винести в окремі класи. Так само як інтерактори, ці класи будуть приймати і повертати чисті структури даних. Таким чином ми уникнемо впливу зовнішніх залежностей на внутрішню логіку інтерактора.
 
-Каждый класс зависимости помещается в отдельный файл рядом с интерактором. Файлы с зависимостями от базы данных содержат префикс `db_` в названии. Файлы с зависимостями от внешних веб API содержат префикс `api_` в названии. От поисковой системы вроде elasticsearch - префикс `search_`. Файлы с адаптерами к другим интеракторам – префикс с названием соответствующего интерактора. Список стандартных префиксов может пополняться. Среди прочего:
- 
-* `schema_` - для файлов, содержащих исключительно структуры данных; если структура используется, например, только в fastapi, то название инструмента идет первым: `fastapi_schema_`.
+Кожен клас залежності кладеться в окремий файл поруч із інтерактором. Файли із залежностями від бази даних містять префікс `db_` в назві. Файли із залежностями від зовнішніх веб API містять префікс `api_` в назві. Від пошукової системи типу elasticsearch - префікс `search_`. Файли з адаптерами до інших інтеракторів - префікс із назвою відповідного інтерактора. Список стандартних префіксів може поповнюватися. Серед іншого:
+* `schema` – для файлів, що містять виключно структури даних; якщо структура використовується, наприклад, лише у fastapi, то назва інструменту йде першою: `fastapi_schema_`;
+* `fn` – для файлів, що містять чисті функції.
 
-Таким образом интерактор может выглядеть примерно так:
+Таким чином інтерактор може виглядати приблизно так:
 
-`src/my_item_updater/interactor.py`
+```
+
+`core/my_item_updater/interactor.py`
 
 ```python
-from src.my_item_updater.api_my_item_loader import (
-    ApiMyItemLoader, LoadedMyItem)
-from src.my_item_updater.db_my_item_saver import (
+from core.my_item_updater.api_my_item_getter import (
+    ApiMyItemGetter, LoadedMyItem)
+from core.my_item_updater.db_my_item_saver import (
     DbMyItemSaver, SavedMyItem)
-from src.my_item_updater.analytics_event_sender import (
+from core.my_item_updater.analytics_event_sender import (
     AnalyticsEventSender, MyItemUpdationEvent)
 
 
 class MyItemUpdater:
     def __init__(
         self,
-        api_my_item_loader: ApiMyItemLoader,
+        api_my_item_getter: ApiMyItemGetter,
         db_my_item_saver: DbMyItemSaver,
         analytics_event_sender: AnalyticsEventSender,
     ):
-        self.api_my_item_loader = api_my_item_loader
+        self.api_my_item_getter = api_my_item_getter
         self.db_my_item_saver = db_my_item_saver
         self.analytics_event_sender = analytics_event_sender
     
     def update_my_item(self):
-        my_item = self.api_my_item_loader.get_item()
+        my_item = self.api_my_item_getter.get_item()
         ...
         self.db_my_item_saver(SavedMyItem(...))
         self.analytics_event_sender(MyItemUpdationEvent(...))
